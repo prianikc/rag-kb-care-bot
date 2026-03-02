@@ -32,3 +32,4 @@ libs/prisma/src/lib/prisma/generated/
 # Claude Code
 .claude/
 .agents/
+skills-lock.json
