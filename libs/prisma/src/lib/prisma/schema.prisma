@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Organization {
+  id          Int        @id @default(autoincrement())
+  name        String     @db.VarChar(255)
+  max_user_id Int        @unique
+  created_at  DateTime   @default(now())
+  documents   Document[]
+  queries     RagQuery[]
+}
+
+model Document {
+  id              Int             @id @default(autoincrement())
+  organization_id Int
+  filename        String          @db.VarChar(500)
+  mime_type       String          @db.VarChar(100)
+  chunk_count     Int             @default(0)
+  status          DocumentStatus  @default(pending)
+  error_message   String?
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+  organization    Organization    @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  chunks          DocumentChunk[]
+}
+
+model DocumentChunk {
+  id          Int      @id @default(autoincrement())
+  document_id Int
+  content     String
+  chunk_index Int
+  qdrant_id   String   @db.VarChar(100)
+  document    Document @relation(fields: [document_id], references: [id], onDelete: Cascade)
+}
+
+model RagQuery {
+  id              Int          @id @default(autoincrement())
+  organization_id Int
+  user_max_id     Int
+  question        String
+  answer          String
+  source_chunks   Json?
+  created_at      DateTime     @default(now())
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+}
+
+enum DocumentStatus {
+  pending
+  indexing
+  ready
+  error
+}

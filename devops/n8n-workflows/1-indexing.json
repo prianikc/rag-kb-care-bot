@@ -1,0 +1,236 @@
+{
+  "id": "1",
+  "name": "RAG: Индексация документов",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "rag-upload-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst body = item.json.body;\nreturn [{ json: { org_id: body.org_id, filename: body.filename, mime_type: body.mime_type, content_base64: body.content_base64 } }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000010",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO \"Document\" (organization_id, filename, mime_type, status, created_at, updated_at) VALUES ($1, $2, $3, 'indexing', NOW(), NOW()) RETURNING id, organization_id, filename, mime_type",
+        "options": {
+          "queryReplacement": "={{ $json.org_id }},={{ $json.filename }},={{ $json.mime_type }}"
+        }
+      },
+      "id": "a1000001-0001-0001-0001-000000000002",
+      "name": "PG: Insert Document",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [500, 300],
+      "credentials": {
+        "postgres": {
+          "id": "vIdfD5fvei7cLHiX",
+          "name": "RAG KB PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pgResult = $input.first().json;\nconst webhookData = $('Parse Input').first().json;\nreturn [{ json: { document_id: pgResult.id, org_id: pgResult.organization_id, filename: pgResult.filename, mime_type: pgResult.mime_type, content_base64: webhookData.content_base64 } }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000011",
+      "name": "Merge PG + Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst base64 = item.json.content_base64;\nconst mimeType = item.json.mime_type;\nconst buffer = Buffer.from(base64, 'base64');\n\nlet text = '';\n\nif (mimeType === 'application/pdf') {\n  const pdfParse = require('pdf-parse');\n  const data = await pdfParse(buffer);\n  text = data.text;\n} else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {\n  const mammoth = require('mammoth');\n  const result = await mammoth.extractRawText({ buffer });\n  text = result.value;\n} else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {\n  const XLSX = require('xlsx');\n  const workbook = XLSX.read(buffer, { type: 'buffer' });\n  text = workbook.SheetNames.map(name => {\n    const sheet = workbook.Sheets[name];\n    return XLSX.utils.sheet_to_csv(sheet);\n  }).join('\\n\\n');\n} else {\n  text = buffer.toString('utf-8');\n}\n\nreturn [{ json: { org_id: item.json.org_id, document_id: item.json.document_id, filename: item.json.filename, extracted_text: text } }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000003",
+      "name": "Extract Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst text = item.json.extracted_text;\nconst chunkSize = 2000;\nconst overlap = 200;\n\nconst chunks = [];\nlet start = 0;\nwhile (start < text.length) {\n  const end = Math.min(start + chunkSize, text.length);\n  chunks.push({ content: text.slice(start, end), chunk_index: chunks.length });\n  start += chunkSize - overlap;\n  if (end >= text.length) break;\n}\n\nreturn [{ json: { org_id: item.json.org_id, document_id: item.json.document_id, filename: item.json.filename, chunks, chunk_count: chunks.length } }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000004",
+      "name": "Split into Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://qdrant:6333/collections/org_{{ $json.org_id }}",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "raw",
+        "body": "={{ JSON.stringify({ vectors: { size: 256, distance: 'Cosine' } }) }}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "a1000001-0001-0001-0001-000000000009",
+      "name": "Qdrant: Create Collection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const crypto = require('crypto');\nconst https = require('https');\n\nconst chunksData = $('Split into Chunks').first().json;\nconst { org_id, document_id, filename, chunks, chunk_count } = chunksData;\nconst apiKey = $env.YC_API_KEY;\nconst modelUri = 'emb://b1glrh7ge8kcm9870erg/text-search-doc/latest';\n\nasync function embed(text) {\n  return new Promise((resolve, reject) => {\n    const body = JSON.stringify({ modelUri, text });\n    const req = https.request('https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding', {\n      method: 'POST',\n      headers: { 'Authorization': 'Api-Key ' + apiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }\n    }, (res) => {\n      let data = '';\n      res.on('data', d => data += d);\n      res.on('end', () => {\n        if (res.statusCode !== 200) reject(new Error('Yandex Embed ' + res.statusCode + ': ' + data));\n        else resolve(JSON.parse(data));\n      });\n    });\n    req.on('error', reject);\n    req.write(body);\n    req.end();\n  });\n}\n\nconst points = [];\nconst chunkRecords = [];\n\nfor (let i = 0; i < chunks.length; i++) {\n  const result = await embed(chunks[i].content);\n  const qdrantId = crypto.randomUUID();\n  points.push({\n    id: qdrantId,\n    vector: result.embedding,\n    payload: { content: chunks[i].content, document_id, chunk_index: chunks[i].chunk_index, filename }\n  });\n  chunkRecords.push({\n    document_id,\n    content: chunks[i].content,\n    chunk_index: chunks[i].chunk_index,\n    qdrant_id: qdrantId\n  });\n}\n\nreturn [{ json: { org_id, document_id, filename, chunk_count, points, chunkRecords } }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000015",
+      "name": "Yandex: Embed & Build Points",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1750, 300]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://qdrant:6333/collections/org_{{ $json.org_id }}/points",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "raw",
+        "body": "={{ JSON.stringify({ points: $json.points }) }}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "a1000001-0001-0001-0001-000000000017",
+      "name": "Qdrant: Upsert Points",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ (() => { const cr = $('Yandex: Embed & Build Points').first().json.chunkRecords; let q = ''; for (const c of cr) { q += `INSERT INTO \"DocumentChunk\" (document_id, content, chunk_index, qdrant_id) VALUES (${c.document_id}, '${c.content.replace(/'/g, \"''\")}', ${c.chunk_index}, '${c.qdrant_id}');\\n`; } q += `UPDATE \"Document\" SET status = 'ready', chunk_count = ${$('Yandex: Embed & Build Points').first().json.chunk_count}, updated_at = NOW() WHERE id = ${$('Yandex: Embed & Build Points').first().json.document_id};`; return q; })() }}",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000007",
+      "name": "PG: Save Chunks & Update",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2250, 300],
+      "credentials": {
+        "postgres": {
+          "id": "vIdfD5fvei7cLHiX",
+          "name": "RAG KB PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const prevData = $('Yandex: Embed & Build Points').first().json;\nreturn [{ json: { success: true, document_id: prevData.document_id, chunk_count: prevData.chunk_count } }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000014",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000008",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2750, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Parse Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [{ "node": "PG: Insert Document", "type": "main", "index": 0 }]
+      ]
+    },
+    "PG: Insert Document": {
+      "main": [
+        [{ "node": "Merge PG + Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge PG + Input": {
+      "main": [
+        [{ "node": "Extract Text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Text": {
+      "main": [
+        [{ "node": "Split into Chunks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split into Chunks": {
+      "main": [
+        [{ "node": "Qdrant: Create Collection", "type": "main", "index": 0 }]
+      ]
+    },
+    "Qdrant: Create Collection": {
+      "main": [
+        [{ "node": "Yandex: Embed & Build Points", "type": "main", "index": 0 }]
+      ]
+    },
+    "Yandex: Embed & Build Points": {
+      "main": [
+        [{ "node": "Qdrant: Upsert Points", "type": "main", "index": 0 }]
+      ]
+    },
+    "Qdrant: Upsert Points": {
+      "main": [
+        [{ "node": "PG: Save Chunks & Update", "type": "main", "index": 0 }]
+      ]
+    },
+    "PG: Save Chunks & Update": {
+      "main": [
+        [{ "node": "Format Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": true
+}

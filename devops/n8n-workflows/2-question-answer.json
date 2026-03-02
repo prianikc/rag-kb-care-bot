@@ -1,0 +1,241 @@
+{
+  "id": "2",
+  "name": "RAG: Вопрос-Ответ",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-question",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a2000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "rag-question-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst body = item.json.body;\nconst crypto = require('crypto');\nconst gigachatAuth = 'Basic ' + Buffer.from($env.GIGACHAT_CLIENT_ID + ':' + $env.GIGACHAT_CLIENT_SECRET).toString('base64');\nconst rquid = crypto.randomUUID();\nreturn [{ json: { org_id: body.org_id, question: body.question, user_max_id: body.user_max_id, _gigachat_auth: gigachatAuth, _rquid: rquid } }];"
+      },
+      "id": "a2000001-0001-0001-0001-000000000010",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "scope", "value": "GIGACHAT_API_PERS" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $json._gigachat_auth }}" },
+            { "name": "RqUID", "value": "={{ $json._rquid }}" }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "a2000001-0001-0001-0001-000000000002",
+      "name": "GigaChat Auth",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const authResult = $input.first().json;\nconst inputData = $('Parse Input').first().json;\nreturn [{ json: { ...inputData, access_token: authResult.access_token } }];"
+      },
+      "id": "a2000001-0001-0001-0001-000000000011",
+      "name": "Merge Auth + Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const https = require('https');\nconst prevData = $('Merge Auth + Input').first().json;\nconst apiKey = $env.YC_API_KEY;\nconst modelUri = 'emb://b1glrh7ge8kcm9870erg/text-search-query/latest';\n\nconst result = await new Promise((resolve, reject) => {\n  const body = JSON.stringify({ modelUri, text: prevData.question });\n  const req = https.request('https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding', {\n    method: 'POST',\n    headers: { 'Authorization': 'Api-Key ' + apiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }\n  }, (res) => {\n    let data = '';\n    res.on('data', d => data += d);\n    res.on('end', () => {\n      if (res.statusCode !== 200) reject(new Error('Yandex Embed ' + res.statusCode + ': ' + data));\n      else resolve(JSON.parse(data));\n    });\n  });\n  req.on('error', reject);\n  req.write(body);\n  req.end();\n});\n\nreturn [{ json: { ...prevData, question_vector: result.embedding } }];"
+      },
+      "id": "a2000001-0001-0001-0001-000000000003",
+      "name": "Yandex: Embed Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://qdrant:6333/collections/org_{{ $json.org_id }}/points/search",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vector: $json.question_vector, limit: 5, with_payload: true }) }}",
+        "options": {}
+      },
+      "id": "a2000001-0001-0001-0001-000000000004",
+      "name": "Qdrant Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const searchResult = $input.first().json;\nconst prevData = $('Yandex: Embed Question').first().json;\n\nconst results = searchResult.result || [];\nconst context = results.map((r, i) => `[Источник ${i + 1}: ${r.payload.filename}]\\n${r.payload.content}`).join('\\n\\n---\\n\\n');\nconst sources = results.map(r => ({ filename: r.payload.filename, chunk_index: r.payload.chunk_index, score: r.score }));\n\nreturn [{ json: { ...prevData, context, sources, question_vector: undefined } }];"
+      },
+      "id": "a2000001-0001-0001-0001-000000000013",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1750, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gigachat.devices.sberbank.ru/api/v1/chat/completions",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'GigaChat', messages: [ { role: 'system', content: 'Ты — ассистент для ответов на вопросы по документам организации. Отвечай строго на основе предоставленного контекста. Если ответа нет в контексте, скажи об этом. Указывай источники в формате [Источник N].' }, { role: 'user', content: 'Контекст:\\n' + $json.context + '\\n\\nВопрос: ' + $json.question } ], temperature: 0.3, max_tokens: 2000 }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $json.access_token }}" }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "a2000001-0001-0001-0001-000000000005",
+      "name": "GigaChat Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const chatResult = $input.first().json;\nconst prevData = $('Build Context').first().json;\nconst answer = chatResult.choices[0].message.content;\nreturn [{ json: { org_id: prevData.org_id, user_max_id: prevData.user_max_id, question: prevData.question, answer, sources: prevData.sources, sources_json: JSON.stringify(prevData.sources) } }];"
+      },
+      "id": "a2000001-0001-0001-0001-000000000014",
+      "name": "Extract Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { Client } = require('pg');\nconst item = $input.first().json;\nconst client = new Client({ host: $env.APP_PG_HOST || 'db', port: parseInt($env.APP_PG_PORT || '5432'), user: $env.APP_PG_USER, password: $env.APP_PG_PASSWORD, database: ($env.APP_PG_DATABASE || 'ragkb_app') });\nawait client.connect();\ntry {\n  const result = await client.query(\n    'INSERT INTO \"RagQuery\" (organization_id, user_max_id, question, answer, source_chunks, created_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id',\n    [item.org_id, item.user_max_id, item.question, item.answer, JSON.stringify(item.sources)]\n  );\n  return [{ json: { id: result.rows[0].id } }];\n} finally {\n  await client.end();\n}"
+      },
+      "id": "a2000001-0001-0001-0001-000000000006",
+      "name": "PG: Log Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pgResult = $input.first().json;\nconst prevData = $('Extract Answer').first().json;\nreturn [{ json: { answer: prevData.answer, sources: prevData.sources, query_id: pgResult.id } }];"
+      },
+      "id": "a2000001-0001-0001-0001-000000000015",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2750, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a2000001-0001-0001-0001-000000000007",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3000, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Parse Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [{ "node": "GigaChat Auth", "type": "main", "index": 0 }]
+      ]
+    },
+    "GigaChat Auth": {
+      "main": [
+        [{ "node": "Merge Auth + Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge Auth + Input": {
+      "main": [
+        [{ "node": "Yandex: Embed Question", "type": "main", "index": 0 }]
+      ]
+    },
+    "Yandex: Embed Question": {
+      "main": [
+        [{ "node": "Qdrant Search", "type": "main", "index": 0 }]
+      ]
+    },
+    "Qdrant Search": {
+      "main": [
+        [{ "node": "Build Context", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [{ "node": "GigaChat Answer", "type": "main", "index": 0 }]
+      ]
+    },
+    "GigaChat Answer": {
+      "main": [
+        [{ "node": "Extract Answer", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Answer": {
+      "main": [
+        [{ "node": "PG: Log Query", "type": "main", "index": 0 }]
+      ]
+    },
+    "PG: Log Query": {
+      "main": [
+        [{ "node": "Format Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": true
+}

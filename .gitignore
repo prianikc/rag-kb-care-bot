@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+tmp/
+
+# Nx cache
+.nx/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env.*
+!.env.example
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Prisma
+libs/prisma/src/lib/prisma/generated/
+
+# Claude Code
+.claude/
+.agents/
