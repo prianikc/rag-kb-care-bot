@@ -19,7 +19,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const item = $input.first();\nconst body = item.json.body;\nreturn [{ json: { org_id: body.org_id, filename: body.filename, mime_type: body.mime_type, content_base64: body.content_base64 } }];"
+        "jsCode": "const item = $input.first();\nconst body = item.json.body;\nreturn [{ json: { org_id: body.org_id, filename: body.filename, mime_type: body.mime_type, content_base64: body.content_base64, folder_id: body.folder_id || null } }];"
       },
       "id": "a1000001-0001-0001-0001-000000000010",
       "name": "Parse Input",
@@ -30,9 +30,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO \"Document\" (organization_id, filename, mime_type, status, created_at, updated_at) VALUES ($1, $2, $3, 'indexing', NOW(), NOW()) RETURNING id, organization_id, filename, mime_type",
+        "query": "INSERT INTO \"Document\" (organization_id, folder_id, filename, mime_type, status, created_at, updated_at) VALUES ($1, NULLIF($2, 'null')::integer, $3, $4, 'indexing', NOW(), NOW()) RETURNING id, organization_id, filename, mime_type",
         "options": {
-          "queryReplacement": "={{ $json.org_id }},={{ $json.filename }},={{ $json.mime_type }}"
+          "queryReplacement": "={{ $json.org_id }},={{ $json.folder_id }},={{ $json.filename }},={{ $json.mime_type }}"
         }
       },
       "id": "a1000001-0001-0001-0001-000000000002",
@@ -61,7 +61,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const item = $input.first();\nconst base64 = item.json.content_base64;\nconst mimeType = item.json.mime_type;\nconst buffer = Buffer.from(base64, 'base64');\n\nlet text = '';\n\nif (mimeType === 'application/pdf') {\n  const pdfParse = require('pdf-parse');\n  const data = await pdfParse(buffer);\n  text = data.text;\n} else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {\n  const mammoth = require('mammoth');\n  const result = await mammoth.extractRawText({ buffer });\n  text = result.value;\n} else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {\n  const XLSX = require('xlsx');\n  const workbook = XLSX.read(buffer, { type: 'buffer' });\n  text = workbook.SheetNames.map(name => {\n    const sheet = workbook.Sheets[name];\n    return XLSX.utils.sheet_to_csv(sheet);\n  }).join('\\n\\n');\n} else {\n  text = buffer.toString('utf-8');\n}\n\nreturn [{ json: { org_id: item.json.org_id, document_id: item.json.document_id, filename: item.json.filename, extracted_text: text } }];"
+        "jsCode": "const item = $input.first();\nconst base64 = item.json.content_base64;\nconst mimeType = item.json.mime_type;\nconst buffer = Buffer.from(base64, 'base64');\nconst { execSync } = require('child_process');\nconst fs = require('fs');\nconst path = require('path');\nconst os = require('os');\n\nlet text = '';\nlet totalPages = 0;\nlet skippedPages = 0;\nlet ocrPages = 0;\n\nconst https = require('https');\nconst ycApiKey = $env.YC_API_KEY;\n\nasync function runOcrYandex(imageBase64, imgMime) {\n  return new Promise((resolve) => {\n    const body = JSON.stringify({ mimeType: imgMime || 'image/png', languageCodes: ['ru', 'en'], content: imageBase64 });\n    const req = https.request('https://ocr.api.cloud.yandex.net/ocr/v1/recognizeText', {\n      method: 'POST',\n      headers: { 'Authorization': 'Api-Key ' + ycApiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }\n    }, (res) => {\n      let data = '';\n      res.on('data', d => data += d);\n      res.on('end', () => {\n        try {\n          const parsed = JSON.parse(data);\n          resolve(parsed.result?.textAnnotation?.fullText || '');\n        } catch(e) { resolve(''); }\n      });\n    });\n    req.on('error', () => resolve(''));\n    req.write(body);\n    req.end();\n  });\n}\n\nfunction runOcrLocal(imagePath) {\n  try {\n    return execSync(\n      'tesseract \"' + imagePath + '\" stdout -l rus+eng --oem 1 --psm 3',\n      { maxBuffer: 50 * 1024 * 1024 }\n    ).toString().trim();\n  } catch (e) {\n    return '';\n  }\n}\n\nasync function runOcr(imagePathOrBase64, imgMime) {\n  let b64 = imagePathOrBase64;\n  let filePath = null;\n  if (!imgMime) {\n    filePath = imagePathOrBase64;\n    b64 = fs.readFileSync(imagePathOrBase64).toString('base64');\n    imgMime = 'image/png';\n  }\n  if (ycApiKey) {\n    const result = await runOcrYandex(b64, imgMime);\n    if (result.length > 0) return result;\n  }\n  if (filePath && fs.existsSync(filePath)) {\n    return runOcrLocal(filePath);\n  }\n  const tmpFile = path.join(os.tmpdir(), 'ocr_' + Date.now() + '.png');\n  try {\n    fs.writeFileSync(tmpFile, Buffer.from(b64, 'base64'));\n    return runOcrLocal(tmpFile);\n  } catch(e) {\n    return '';\n  } finally {\n    try { fs.unlinkSync(tmpFile); } catch(e) {}\n  }\n}\n\nconst IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/tiff', 'image/bmp', 'image/webp'];\nconst OFFICE_MIMES = [\n  'application/vnd.openxmlformats-officedocument.presentationml.presentation',\n  'application/vnd.oasis.opendocument.text'\n];\n\nif (mimeType === 'application/pdf') {\n  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-'));\n  try {\n    const pdfPath = path.join(tmpDir, 'input.pdf');\n    fs.writeFileSync(pdfPath, buffer);\n    try {\n      const pagesOut = execSync('pdfinfo \"' + pdfPath + '\" 2>/dev/null | grep Pages | awk \"{print \\\\$2}\"', { maxBuffer: 10 * 1024 * 1024 }).toString().trim();\n      totalPages = parseInt(pagesOut, 10) || 1;\n    } catch(e) { totalPages = 1; }\n    let pdfText = '';\n    try {\n      pdfText = execSync('pdftotext -layout \"' + pdfPath + '\" -', { maxBuffer: 50 * 1024 * 1024 }).toString();\n    } catch(e) { pdfText = ''; }\n    if (pdfText.trim().length >= 10) {\n      text = pdfText;\n    } else {\n      for (let p = 1; p <= totalPages; p++) {\n        try {\n          execSync('pdftoppm -png -r 300 -f ' + p + ' -l ' + p + ' \"' + pdfPath + '\" \"' + tmpDir + '/page\"', { maxBuffer: 50 * 1024 * 1024 });\n          const files = fs.readdirSync(tmpDir).filter(f => f.startsWith('page-') && f.endsWith('.png'));\n          if (files.length > 0) {\n            const imgPath = path.join(tmpDir, files[files.length - 1]);\n            const imgB64 = fs.readFileSync(imgPath).toString('base64');\n            const ocrText = await runOcr(imgB64, 'image/png');\n            if (ocrText.length > 10) {\n              text += (text ? '\\n\\n' : '') + ocrText;\n              ocrPages++;\n            } else {\n              skippedPages++;\n            }\n            try { fs.unlinkSync(imgPath); } catch(e) {}\n          } else {\n            skippedPages++;\n          }\n        } catch (e) {\n          skippedPages++;\n        }\n      }\n    }\n  } catch (e) {\n    text = '';\n    if (totalPages === 0) totalPages = 1;\n    skippedPages = totalPages;\n  } finally {\n    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch(e) {}\n  }\n} else if (IMAGE_MIMES.includes(mimeType)) {\n  totalPages = 1;\n  try {\n    text = await runOcr(base64, mimeType);\n    if (text.length > 0) {\n      ocrPages = 1;\n    } else {\n      skippedPages = 1;\n    }\n  } catch (e) {\n    text = '';\n    skippedPages = 1;\n  }\n} else if (mimeType === 'application/rtf') {\n  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-'));\n  try {\n    const filePath = path.join(tmpDir, 'input.rtf');\n    fs.writeFileSync(filePath, buffer);\n    const raw = execSync('unrtf --text \"' + filePath + '\"', { maxBuffer: 50 * 1024 * 1024 }).toString();\n    text = raw.split('\\n').filter(l => !l.startsWith('###') && l.trim() !== '-----------------').join('\\n').trim();\n  } catch (e) {\n    text = '';\n    skippedPages = 1;\n    totalPages = 1;\n  } finally {\n    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch(e) {}\n  }\n} else if (mimeType === 'application/msword') {\n  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-'));\n  try {\n    const filePath = path.join(tmpDir, 'input.doc');\n    fs.writeFileSync(filePath, buffer);\n    text = execSync('antiword \"' + filePath + '\"', { maxBuffer: 50 * 1024 * 1024 }).toString().trim();\n  } catch (e) {\n    text = '';\n    skippedPages = 1;\n    totalPages = 1;\n  } finally {\n    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch(e) {}\n  }\n} else if (OFFICE_MIMES.includes(mimeType)) {\n  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-'));\n  try {\n    const { parseOffice } = require('officeparser');\n    const extMap = {\n      'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',\n      'application/vnd.oasis.opendocument.text': '.odt'\n    };\n    const ext = extMap[mimeType];\n    const filePath = path.join(tmpDir, 'input' + ext);\n    fs.writeFileSync(filePath, buffer);\n    const result = await parseOffice(filePath);\n    if (typeof result === 'string') {\n      text = result;\n    } else if (result && result.content) {\n      text = result.content.map(p => p.text || '').join('\\n');\n    }\n  } catch (e) {\n    text = '';\n    skippedPages = 1;\n    totalPages = 1;\n  } finally {\n    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch(e) {}\n  }\n} else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {\n  try {\n    const mammoth = require('mammoth');\n    const result = await mammoth.extractRawText({ buffer });\n    text = result.value || '';\n  } catch (e) {\n    text = '';\n    skippedPages = 1;\n    totalPages = 1;\n  }\n} else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {\n  try {\n    const XLSX = require('xlsx');\n    const workbook = XLSX.read(buffer, { type: 'buffer' });\n    text = workbook.SheetNames.map(name => {\n      const sheet = workbook.Sheets[name];\n      return XLSX.utils.sheet_to_csv(sheet);\n    }).join('\\n\\n');\n  } catch (e) {\n    text = '';\n    skippedPages = 1;\n    totalPages = 1;\n  }\n} else {\n  text = buffer.toString('utf-8');\n}\n\nreturn [{ json: { org_id: item.json.org_id, document_id: item.json.document_id, filename: item.json.filename, extracted_text: text, total_pages: totalPages, skipped_pages: skippedPages, ocr_pages: ocrPages } }];"
       },
       "id": "a1000001-0001-0001-0001-000000000003",
       "name": "Extract Text",
@@ -72,13 +72,40 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const item = $input.first();\nconst text = item.json.extracted_text;\nconst chunkSize = 2000;\nconst overlap = 200;\n\nconst chunks = [];\nlet start = 0;\nwhile (start < text.length) {\n  const end = Math.min(start + chunkSize, text.length);\n  chunks.push({ content: text.slice(start, end), chunk_index: chunks.length });\n  start += chunkSize - overlap;\n  if (end >= text.length) break;\n}\n\nreturn [{ json: { org_id: item.json.org_id, document_id: item.json.document_id, filename: item.json.filename, chunks, chunk_count: chunks.length } }];"
+        "jsCode": "const item = $input.first();\nconst text = item.json.extracted_text;\nconst chunkSize = 2000;\nconst overlap = 200;\n\nconst chunks = [];\nlet start = 0;\nwhile (start < text.length) {\n  const end = Math.min(start + chunkSize, text.length);\n  chunks.push({ content: text.slice(start, end), chunk_index: chunks.length });\n  start += chunkSize - overlap;\n  if (end >= text.length) break;\n}\n\nreturn [{ json: { org_id: item.json.org_id, document_id: item.json.document_id, filename: item.json.filename, chunks, chunk_count: chunks.length, skipped_pages: item.json.skipped_pages || 0, total_pages: item.json.total_pages || 0, ocr_pages: item.json.ocr_pages || 0 } }];"
       },
       "id": "a1000001-0001-0001-0001-000000000004",
       "name": "Split into Chunks",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "check-chunks-gt-zero",
+              "leftValue": "={{ $json.chunk_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1000001-0001-0001-0001-000000000020",
+      "name": "Check Chunks",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 300]
     },
     {
       "parameters": {
@@ -96,19 +123,20 @@
       "name": "Qdrant: Create Collection",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1500, 300],
+      "position": [1750, 300],
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const crypto = require('crypto');\nconst https = require('https');\n\nconst chunksData = $('Split into Chunks').first().json;\nconst { org_id, document_id, filename, chunks, chunk_count } = chunksData;\nconst apiKey = $env.YC_API_KEY;\nconst modelUri = 'emb://b1glrh7ge8kcm9870erg/text-search-doc/latest';\n\nasync function embed(text) {\n  return new Promise((resolve, reject) => {\n    const body = JSON.stringify({ modelUri, text });\n    const req = https.request('https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding', {\n      method: 'POST',\n      headers: { 'Authorization': 'Api-Key ' + apiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }\n    }, (res) => {\n      let data = '';\n      res.on('data', d => data += d);\n      res.on('end', () => {\n        if (res.statusCode !== 200) reject(new Error('Yandex Embed ' + res.statusCode + ': ' + data));\n        else resolve(JSON.parse(data));\n      });\n    });\n    req.on('error', reject);\n    req.write(body);\n    req.end();\n  });\n}\n\nconst points = [];\nconst chunkRecords = [];\n\nfor (let i = 0; i < chunks.length; i++) {\n  const result = await embed(chunks[i].content);\n  const qdrantId = crypto.randomUUID();\n  points.push({\n    id: qdrantId,\n    vector: result.embedding,\n    payload: { content: chunks[i].content, document_id, chunk_index: chunks[i].chunk_index, filename }\n  });\n  chunkRecords.push({\n    document_id,\n    content: chunks[i].content,\n    chunk_index: chunks[i].chunk_index,\n    qdrant_id: qdrantId\n  });\n}\n\nreturn [{ json: { org_id, document_id, filename, chunk_count, points, chunkRecords } }];"
+        "jsCode": "const crypto = require('crypto');\nconst https = require('https');\n\nconst chunksData = $('Split into Chunks').first().json;\nconst { org_id, document_id, filename, chunks, chunk_count } = chunksData;\nconst apiKey = $env.YC_API_KEY;\nconst modelUri = 'emb://b1glrh7ge8kcm9870erg/text-search-doc/latest';\n\nfunction sleep(ms) { return new Promise(r => setTimeout(r, ms)); }\n\nasync function embed(text) {\n  for (let attempt = 0; attempt < 3; attempt++) {\n    const result = await new Promise((resolve, reject) => {\n      const body = JSON.stringify({ modelUri, text });\n      const req = https.request('https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding', {\n        method: 'POST',\n        headers: { 'Authorization': 'Api-Key ' + apiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }\n      }, (res) => {\n        let data = '';\n        res.on('data', d => data += d);\n        res.on('end', () => {\n          if (res.statusCode === 429 || res.statusCode >= 500) {\n            resolve({ _retry: true, status: res.statusCode, data });\n          } else if (res.statusCode !== 200) {\n            reject(new Error('Yandex Embed ' + res.statusCode + ': ' + data));\n          } else {\n            resolve(JSON.parse(data));\n          }\n        });\n      });\n      req.on('error', reject);\n      req.write(body);\n      req.end();\n    });\n    if (result._retry) {\n      if (attempt < 2) { await sleep(1000 * Math.pow(2, attempt)); continue; }\n      throw new Error('Yandex Embed ' + result.status + ' after 3 retries: ' + result.data);\n    }\n    return result;\n  }\n}\n\nconst points = [];\nconst chunkRecords = [];\n\nfor (let i = 0; i < chunks.length; i++) {\n  if (i > 0) await sleep(200);\n  const result = await embed(chunks[i].content);\n  const qdrantId = crypto.randomUUID();\n  points.push({\n    id: qdrantId,\n    vector: result.embedding,\n    payload: { content: chunks[i].content, document_id, chunk_index: chunks[i].chunk_index, filename }\n  });\n  chunkRecords.push({\n    document_id,\n    content: chunks[i].content,\n    chunk_index: chunks[i].chunk_index,\n    qdrant_id: qdrantId\n  });\n}\n\nreturn [{ json: { org_id, document_id, filename, chunk_count, points, chunkRecords, skipped_pages: chunksData.skipped_pages || 0, total_pages: chunksData.total_pages || 0, ocr_pages: chunksData.ocr_pages || 0 } }];"
       },
       "id": "a1000001-0001-0001-0001-000000000015",
       "name": "Yandex: Embed & Build Points",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1750, 300]
+      "position": [2000, 300],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -126,36 +154,31 @@
       "name": "Qdrant: Upsert Points",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "={{ (() => { const cr = $('Yandex: Embed & Build Points').first().json.chunkRecords; let q = ''; for (const c of cr) { q += `INSERT INTO \"DocumentChunk\" (document_id, content, chunk_index, qdrant_id) VALUES (${c.document_id}, '${c.content.replace(/'/g, \"''\")}', ${c.chunk_index}, '${c.qdrant_id}');\\n`; } q += `UPDATE \"Document\" SET status = 'ready', chunk_count = ${$('Yandex: Embed & Build Points').first().json.chunk_count}, updated_at = NOW() WHERE id = ${$('Yandex: Embed & Build Points').first().json.document_id};`; return q; })() }}",
-        "options": {}
-      },
-      "id": "a1000001-0001-0001-0001-000000000007",
-      "name": "PG: Save Chunks & Update",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
       "position": [2250, 300],
-      "credentials": {
-        "postgres": {
-          "id": "vIdfD5fvei7cLHiX",
-          "name": "RAG KB PostgreSQL"
-        }
-      }
+      "onError": "continueRegularOutput",
+      "executeOnce": true
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const prevData = $('Yandex: Embed & Build Points').first().json;\nreturn [{ json: { success: true, document_id: prevData.document_id, chunk_count: prevData.chunk_count } }];"
+        "jsCode": "const { Client } = require('pg');\nconst d = $('Yandex: Embed & Build Points').first().json;\nconst { chunkRecords, chunk_count, document_id, skipped_pages } = d;\n\nconst client = new Client({\n  host: $env.APP_PG_HOST,\n  port: parseInt($env.APP_PG_PORT),\n  user: $env.APP_PG_USER,\n  password: $env.APP_PG_PASSWORD,\n  database: $env.APP_PG_DATABASE,\n});\n\nawait client.connect();\ntry {\n  await client.query('BEGIN');\n  for (const c of chunkRecords) {\n    await client.query(\n      'INSERT INTO \"DocumentChunk\" (document_id, content, chunk_index, qdrant_id) VALUES ($1, $2, $3, $4)',\n      [c.document_id, c.content, c.chunk_index, c.qdrant_id]\n    );\n  }\n  let status = 'error';\n  if (chunk_count > 0 && (skipped_pages || 0) > 0) status = 'partial';\n  else if (chunk_count > 0) status = 'ready';\n  await client.query(\n    'UPDATE \"Document\" SET status = $1, chunk_count = $2, updated_at = NOW() WHERE id = $3',\n    [status, chunk_count, document_id]\n  );\n  await client.query('COMMIT');\n} catch (e) {\n  await client.query('ROLLBACK');\n  throw e;\n} finally {\n  await client.end();\n}\n\nreturn [{ json: d }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000007",
+      "name": "PG: Save Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const prevData = $input.first().json;\nreturn [{ json: { success: true, document_id: prevData.document_id, chunk_count: prevData.chunk_count || 0, skipped_pages: prevData.skipped_pages || 0, total_pages: prevData.total_pages || 0, ocr_pages: prevData.ocr_pages || 0 } }];"
       },
       "id": "a1000001-0001-0001-0001-000000000014",
       "name": "Format Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2500, 300]
+      "position": [2750, 300]
     },
     {
       "parameters": {
@@ -167,7 +190,41 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2750, 300]
+      "position": [3000, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { Client } = require('pg');\nconst d = $input.first().json;\n\nconst client = new Client({\n  host: $env.APP_PG_HOST,\n  port: parseInt($env.APP_PG_PORT),\n  user: $env.APP_PG_USER,\n  password: $env.APP_PG_PASSWORD,\n  database: $env.APP_PG_DATABASE,\n});\n\nawait client.connect();\ntry {\n  await client.query(\n    'UPDATE \"Document\" SET status = $1, chunk_count = 0, updated_at = NOW() WHERE id = $2',\n    ['error', d.document_id]\n  );\n} finally {\n  await client.end();\n}\n\nreturn [{ json: { org_id: d.org_id, document_id: d.document_id, filename: d.filename, chunk_count: 0, skipped_pages: d.skipped_pages || 0, total_pages: d.total_pages || 0, ocr_pages: d.ocr_pages || 0 } }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000021",
+      "name": "PG: Update Empty",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1750, 600]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { Client } = require('pg');\n\nlet document_id;\ntry {\n  document_id = $('Split into Chunks').first().json.document_id;\n} catch(e) {\n  try { document_id = $('Merge PG + Input').first().json.document_id; } catch(e2) { document_id = null; }\n}\n\nif (document_id) {\n  const client = new Client({\n    host: $env.APP_PG_HOST,\n    port: parseInt($env.APP_PG_PORT),\n    user: $env.APP_PG_USER,\n    password: $env.APP_PG_PASSWORD,\n    database: $env.APP_PG_DATABASE,\n  });\n  await client.connect();\n  try {\n    await client.query(\n      'UPDATE \"Document\" SET status = $1, updated_at = NOW() WHERE id = $2',\n      ['error', document_id]\n    );\n  } finally {\n    await client.end();\n  }\n}\n\nconst errItem = $input.first();\nconst errorMsg = errItem.json?.message || errItem.json?.error?.message || 'Indexing failed';\nreturn [{ json: { success: false, document_id, error: errorMsg } }];"
+      },
+      "id": "a1000001-0001-0001-0001-000000000022",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a1000001-0001-0001-0001-000000000023",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2500, 600]
     }
   ],
   "connections": {
@@ -198,7 +255,13 @@
     },
     "Split into Chunks": {
       "main": [
-        [{ "node": "Qdrant: Create Collection", "type": "main", "index": 0 }]
+        [{ "node": "Check Chunks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check Chunks": {
+      "main": [
+        [{ "node": "Qdrant: Create Collection", "type": "main", "index": 0 }],
+        [{ "node": "PG: Update Empty", "type": "main", "index": 0 }]
       ]
     },
     "Qdrant: Create Collection": {
@@ -208,15 +271,21 @@
     },
     "Yandex: Embed & Build Points": {
       "main": [
-        [{ "node": "Qdrant: Upsert Points", "type": "main", "index": 0 }]
+        [{ "node": "Qdrant: Upsert Points", "type": "main", "index": 0 }],
+        [{ "node": "Handle Error", "type": "main", "index": 0 }]
       ]
     },
     "Qdrant: Upsert Points": {
       "main": [
-        [{ "node": "PG: Save Chunks & Update", "type": "main", "index": 0 }]
+        [{ "node": "PG: Save Chunks", "type": "main", "index": 0 }]
       ]
     },
-    "PG: Save Chunks & Update": {
+    "PG: Save Chunks": {
+      "main": [
+        [{ "node": "Format Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "PG: Update Empty": {
       "main": [
         [{ "node": "Format Response", "type": "main", "index": 0 }]
       ]
@@ -224,6 +293,11 @@
     "Format Response": {
       "main": [
         [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    },
+    "Handle Error": {
+      "main": [
+        [{ "node": "Respond Error", "type": "main", "index": 0 }]
       ]
     }
   },

@@ -386,6 +386,7 @@ type FieldRefInputType<Model, FieldType> = Model extends never ? never : FieldRe
 export const ModelName = {
   Organization: 'Organization',
   Document: 'Document',
+  Folder: 'Folder',
   DocumentChunk: 'DocumentChunk',
   RagQuery: 'RagQuery'
 } as const
@@ -403,7 +404,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "organization" | "document" | "documentChunk" | "ragQuery"
+    modelProps: "organization" | "document" | "folder" | "documentChunk" | "ragQuery"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -552,6 +553,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.DocumentCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.DocumentCountAggregateOutputType> | number
+        }
+      }
+    }
+    Folder: {
+      payload: Prisma.$FolderPayload<ExtArgs>
+      fields: Prisma.FolderFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.FolderFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.FolderFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>
+        }
+        findFirst: {
+          args: Prisma.FolderFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.FolderFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>
+        }
+        findMany: {
+          args: Prisma.FolderFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>[]
+        }
+        create: {
+          args: Prisma.FolderCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>
+        }
+        createMany: {
+          args: Prisma.FolderCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.FolderCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>[]
+        }
+        delete: {
+          args: Prisma.FolderDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>
+        }
+        update: {
+          args: Prisma.FolderUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>
+        }
+        deleteMany: {
+          args: Prisma.FolderDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.FolderUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.FolderUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>[]
+        }
+        upsert: {
+          args: Prisma.FolderUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FolderPayload>
+        }
+        aggregate: {
+          args: Prisma.FolderAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateFolder>
+        }
+        groupBy: {
+          args: Prisma.FolderGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FolderGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.FolderCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FolderCountAggregateOutputType> | number
         }
       }
     }
@@ -755,6 +830,7 @@ export type OrganizationScalarFieldEnum = (typeof OrganizationScalarFieldEnum)[k
 export const DocumentScalarFieldEnum = {
   id: 'id',
   organization_id: 'organization_id',
+  folder_id: 'folder_id',
   filename: 'filename',
   mime_type: 'mime_type',
   chunk_count: 'chunk_count',
@@ -765,6 +841,17 @@ export const DocumentScalarFieldEnum = {
 } as const
 
 export type DocumentScalarFieldEnum = (typeof DocumentScalarFieldEnum)[keyof typeof DocumentScalarFieldEnum]
+
+
+export const FolderScalarFieldEnum = {
+  id: 'id',
+  organization_id: 'organization_id',
+  parent_id: 'parent_id',
+  name: 'name',
+  created_at: 'created_at'
+} as const
+
+export type FolderScalarFieldEnum = (typeof FolderScalarFieldEnum)[keyof typeof FolderScalarFieldEnum]
 
 
 export const DocumentChunkScalarFieldEnum = {
@@ -1018,6 +1105,7 @@ export type PrismaClientOptions = ({
 export type GlobalOmitConfig = {
   organization?: Prisma.OrganizationOmit
   document?: Prisma.DocumentOmit
+  folder?: Prisma.FolderOmit
   documentChunk?: Prisma.DocumentChunkOmit
   ragQuery?: Prisma.RagQueryOmit
 }

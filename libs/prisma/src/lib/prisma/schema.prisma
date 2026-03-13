@@ -8,17 +8,19 @@ datasource db {
 }
 
 model Organization {
-  id          Int        @id @default(autoincrement())
-  name        String     @db.VarChar(255)
-  max_user_id Int        @unique
-  created_at  DateTime   @default(now())
-  documents   Document[]
-  queries     RagQuery[]
+  id                Int          @id @default(autoincrement())
+  name              String       @db.VarChar(255)
+  max_user_id       Int          @unique
+  created_at        DateTime     @default(now())
+  documents         Document[]
+  queries           RagQuery[]
+  folders           Folder[]
 }
 
 model Document {
   id              Int             @id @default(autoincrement())
   organization_id Int
+  folder_id       Int?
   filename        String          @db.VarChar(500)
   mime_type       String          @db.VarChar(100)
   chunk_count     Int             @default(0)
@@ -27,7 +29,20 @@ model Document {
   created_at      DateTime        @default(now())
   updated_at      DateTime        @updatedAt
   organization    Organization    @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  folder          Folder?         @relation(fields: [folder_id], references: [id], onDelete: SetNull)
   chunks          DocumentChunk[]
+}
+
+model Folder {
+  id              Int            @id @default(autoincrement())
+  organization_id Int
+  parent_id       Int?
+  name            String         @db.VarChar(255)
+  created_at      DateTime       @default(now())
+  organization    Organization   @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  parent          Folder?        @relation("FolderTree", fields: [parent_id], references: [id], onDelete: Cascade)
+  children        Folder[]       @relation("FolderTree")
+  documents       Document[]
 }
 
 model DocumentChunk {
@@ -54,5 +69,6 @@ enum DocumentStatus {
   pending
   indexing
   ready
+  partial
   error
 }

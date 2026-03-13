@@ -20,28 +20,26 @@ export class MenuService {
 
   async showMainMenu(ctx: Context): Promise<void> {
     const userId = ctx.user.user_id;
+    const triggeringId = ctx.messageId ?? ctx.message?.body?.mid;
+
+    await this.redisStateService.clearAllMessages(ctx, userId, triggeringId);
 
     const startKeyboard = Keyboard.inlineKeyboard([
-      [Keyboard.button.callback('📄 Загрузить документ', KbPayload.startUpload)],
-      [Keyboard.button.callback('❓ Задать вопрос', KbPayload.startQuestion)],
       [Keyboard.button.callback('📋 Мои документы', KbPayload.listDocs)],
     ]);
 
-    await ctx.reply('<b>📚 База знаний</b>\nВыберите действие:', {
-      format: 'html',
-      attachments: [startKeyboard],
-    });
-
-    await this.redisStateService.clearMessages(ctx, userId);
+    const message = await ctx.reply(
+      '<b>📚 База знаний</b>\n\nПросто напишите вопрос — я найду ответ в ваших документах.\nЧтобы добавить документ — отправьте файл в чат.\n\nПоддерживаемые форматы: PDF, DOCX, XLSX, TXT, MD, CSV, изображения (OCR)',
+      {
+        format: 'html',
+        attachments: [startKeyboard],
+      },
+    );
 
     await this.redisStateService.setUserState({
       userId,
       flow: UserFlow.menu,
+      messageIds: [message.body.mid],
     });
-
-    const { messageId } = ctx;
-    if (messageId) {
-      await ctx.api.deleteMessage(messageId);
-    }
   }
 }

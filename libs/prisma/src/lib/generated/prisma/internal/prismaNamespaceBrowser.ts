@@ -53,6 +53,7 @@ export const AnyNull = runtime.AnyNull
 export const ModelName = {
   Organization: 'Organization',
   Document: 'Document',
+  Folder: 'Folder',
   DocumentChunk: 'DocumentChunk',
   RagQuery: 'RagQuery'
 } as const
@@ -86,6 +87,7 @@ export type OrganizationScalarFieldEnum = (typeof OrganizationScalarFieldEnum)[k
 export const DocumentScalarFieldEnum = {
   id: 'id',
   organization_id: 'organization_id',
+  folder_id: 'folder_id',
   filename: 'filename',
   mime_type: 'mime_type',
   chunk_count: 'chunk_count',
@@ -96,6 +98,17 @@ export const DocumentScalarFieldEnum = {
 } as const
 
 export type DocumentScalarFieldEnum = (typeof DocumentScalarFieldEnum)[keyof typeof DocumentScalarFieldEnum]
+
+
+export const FolderScalarFieldEnum = {
+  id: 'id',
+  organization_id: 'organization_id',
+  parent_id: 'parent_id',
+  name: 'name',
+  created_at: 'created_at'
+} as const
+
+export type FolderScalarFieldEnum = (typeof FolderScalarFieldEnum)[keyof typeof FolderScalarFieldEnum]
 
 
 export const DocumentChunkScalarFieldEnum = {

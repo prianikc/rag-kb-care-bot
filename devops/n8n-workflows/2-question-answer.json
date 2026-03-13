@@ -19,7 +19,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const item = $input.first();\nconst body = item.json.body;\nconst crypto = require('crypto');\nconst gigachatAuth = 'Basic ' + Buffer.from($env.GIGACHAT_CLIENT_ID + ':' + $env.GIGACHAT_CLIENT_SECRET).toString('base64');\nconst rquid = crypto.randomUUID();\nreturn [{ json: { org_id: body.org_id, question: body.question, user_max_id: body.user_max_id, _gigachat_auth: gigachatAuth, _rquid: rquid } }];"
+        "jsCode": "const item = $input.first();\nconst body = item.json.body;\nconst crypto = require('crypto');\nconst gigachatAuth = 'Basic ' + Buffer.from($env.GIGACHAT_CLIENT_ID + ':' + $env.GIGACHAT_CLIENT_SECRET).toString('base64');\nconst rquid = crypto.randomUUID();\nreturn [{ json: { org_id: body.org_id, question: body.question, user_max_id: body.user_max_id, folder_structure: body.folder_structure || '', _gigachat_auth: gigachatAuth, _rquid: rquid } }];"
       },
       "id": "a2000001-0001-0001-0001-000000000010",
       "name": "Parse Input",
@@ -97,7 +97,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const searchResult = $input.first().json;\nconst prevData = $('Yandex: Embed Question').first().json;\n\nconst results = searchResult.result || [];\nconst context = results.map((r, i) => `[Источник ${i + 1}: ${r.payload.filename}]\\n${r.payload.content}`).join('\\n\\n---\\n\\n');\nconst sources = results.map(r => ({ filename: r.payload.filename, chunk_index: r.payload.chunk_index, score: r.score }));\n\nreturn [{ json: { ...prevData, context, sources, question_vector: undefined } }];"
+        "jsCode": "const searchResult = $input.first().json;\nconst prevData = $('Yandex: Embed Question').first().json;\n\nconst results = searchResult.result || [];\nlet context = '';\nif (prevData.folder_structure) {\n  context += '[Структура папок и документов организации]\\n' + prevData.folder_structure + '\\n\\n---\\n\\n';\n}\ncontext += results.map((r, i) => { const fn = r.payload.filename; const isImage = /\\.(jpg|jpeg|png|tiff?|bmp|webp)$/i.test(fn); const label = isImage ? `Источник ${i + 1} (OCR из изображения): ${fn}` : `Источник ${i + 1}: ${fn}`; return `[${label}]\\n${r.payload.content}`; }).join('\\n\\n---\\n\\n');\nconst sources = results.map(r => ({ filename: r.payload.filename, chunk_index: r.payload.chunk_index, score: r.score }));\n\nreturn [{ json: { ...prevData, context, sources, question_vector: undefined } }];"
       },
       "id": "a2000001-0001-0001-0001-000000000013",
       "name": "Build Context",
@@ -112,7 +112,7 @@
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'GigaChat', messages: [ { role: 'system', content: 'Ты — ассистент для ответов на вопросы по документам организации. Отвечай строго на основе предоставленного контекста. Если ответа нет в контексте, скажи об этом. Указывай источники в формате [Источник N].' }, { role: 'user', content: 'Контекст:\\n' + $json.context + '\\n\\nВопрос: ' + $json.question } ], temperature: 0.3, max_tokens: 2000 }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'GigaChat', messages: [ { role: 'system', content: 'Ты — ассистент для ответов на вопросы по документам организации. Отвечай строго на основе предоставленного контекста. Контекст содержит: 1) структуру папок и документов организации — используй её для ответов о том, какие папки и файлы есть, где они расположены; 2) текст, извлечённый из документов: для PDF и офисных файлов — прямое извлечение текста, для изображений (JPG, PNG и др.) — текст, распознанный через OCR. OCR-текст может содержать ошибки распознавания — старайся понять смысл, несмотря на возможные опечатки. Если ответа нет в контексте, скажи об этом. Указывай источники в формате [Источник N].' }, { role: 'user', content: 'Контекст:\\n' + $json.context + '\\n\\nВопрос: ' + $json.question } ], temperature: 0.3, max_tokens: 2000 }) }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

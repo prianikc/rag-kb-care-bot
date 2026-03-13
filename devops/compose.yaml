@@ -71,11 +71,12 @@ services:
       - DB_POSTGRESDB_PASSWORD=${PG_PASSWD}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - N8N_SECURE_COOKIE=false
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - NODE_FUNCTION_ALLOW_BUILTIN=*
-      - NODE_FUNCTION_ALLOW_EXTERNAL=pg,pdf-parse,mammoth,xlsx
+      - NODE_FUNCTION_ALLOW_EXTERNAL=pg,pdf-parse,mammoth,xlsx,officeparser
       - N8N_RUNNERS_MODE=internal
-      - N8N_RUNNERS_ALLOW_EXTERNAL_MODULES=pg,pdf-parse,mammoth,xlsx
+      - N8N_RUNNERS_ALLOW_EXTERNAL_MODULES=pg,pdf-parse,mammoth,xlsx,officeparser
       - GIGACHAT_CLIENT_ID=${GIGACHAT_CLIENT_ID}
       - GIGACHAT_CLIENT_SECRET=${GIGACHAT_CLIENT_SECRET}
       - YC_API_KEY=${YC_API_KEY}

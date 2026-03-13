@@ -8,10 +8,10 @@ const DEFAULT_TTL_SECONDS = 86400;
 const USER_STATE_KEY = (userId: number): string => `user:state:${userId}`;
 
 @Injectable()
-export class RedisStateService<T = unknown> {
+export class RedisStateService {
   constructor(@InjectRedis() private readonly redis: Redis) {}
 
-  async getUserState<K = T>(userId: number): Promise<UserSessionState<K> | null> {
+  async getUserState(userId: number): Promise<UserSessionState | null> {
     const raw = await this.redis.get(USER_STATE_KEY(userId));
     if (!raw) return null;
     try {
@@ -21,9 +21,9 @@ export class RedisStateService<T = unknown> {
     }
   }
 
-  async setUserState<K = T>(state: UserSessionState<K>, ttlSeconds = DEFAULT_TTL_SECONDS): Promise<void> {
+  async setUserState(state: UserSessionState, ttlSeconds = DEFAULT_TTL_SECONDS): Promise<void> {
     const key = USER_STATE_KEY(state.userId);
-    const stateWithTimestamp: UserSessionState<K> = {
+    const stateWithTimestamp: UserSessionState = {
       ...state,
       lastActivityAt: Date.now(),
     };
@@ -40,5 +40,15 @@ export class RedisStateService<T = unknown> {
     if (!state) return;
     await Promise.all((state.messageIds ?? []).map((m) => ctx.api.deleteMessage(m)));
     await this.setUserState({ ...state, messageIds: [] });
+  }
+
+  async clearAllMessages(ctx: Context, userId: number, triggeringMsgId?: string | null): Promise<void> {
+    const state = await this.getUserState(userId);
+    const toDelete = new Set<string>(state?.messageIds ?? []);
+    if (triggeringMsgId) toDelete.add(triggeringMsgId);
+    await Promise.allSettled([...toDelete].map((id) => ctx.api.deleteMessage(id)));
+    if (state) {
+      await this.setUserState({ ...state, messageIds: [] });
+    }
   }
 }

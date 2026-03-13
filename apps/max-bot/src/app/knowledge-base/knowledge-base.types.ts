@@ -1,21 +1,15 @@
 export enum KbPayload {
-  startUpload = 'kb_start_upload',
-  startQuestion = 'kb_start_question',
   listDocs = 'kb_list_docs',
+  createFolder = 'kb_cf',
+  deleteFolder = 'kb_df',
+  moveDoc = 'kb_mv',
+  cancelAction = 'kb_cancel',
+  confirmPhotoUpload = 'kb_cpu',
+  createFolderAndMove = 'kb_cfm',
 }
 
-export enum UploadStep {
-  awaitingFile = 'awaiting_file',
-}
-
-export interface UploadFlowData {
-  step: UploadStep;
-}
-
-export enum QuestionStep {
-  awaitingQuestion = 'awaiting_question',
-}
-
-export interface QuestionFlowData {
-  step: QuestionStep;
-}
+export const KB_DOCS_PAGE_PREFIX = 'kb_docs_page_';
+export const KB_FOLDER_PREFIX = 'kb_f_';
+export const KB_FOLDER_PAGE_PREFIX = 'kb_fp_';
+export const KB_FOLDER_DELETE_PREFIX = 'kb_fd_';
+export const KB_FOLDER_DELETE_CONFIRM_PREFIX = 'kb_fdc_';

@@ -1,0 +1,77 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "write_file|str_replace_editor|create_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/pre_secrets_guard.py",
+            "description": "🔐 Block hardcoded secrets (API keys, passwords, tokens)"
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/pre_edit_rag.py",
+            "description": "⚠️  Warn before modifying critical RAG pipeline files"
+          }
+        ]
+      },
+      {
+        "matcher": "bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/pre_bash_guard.py",
+            "description": "🛡️  Block dangerous bash commands (rm -rf, drop table, etc)"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_file|str_replace_editor|create_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/post_edit_lint.py",
+            "description": "✅ Auto-lint Python files after edit (ruff + mypy)"
+          }
+        ]
+      },
+      {
+        "matcher": "bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/post_ingest_verify.py",
+            "description": "📚 After ingestion scripts: auto-verify retrieval quality"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/notify_waiting.py",
+            "description": "🔔 Desktop notification when Claude needs input"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/stop_notify_slack.py",
+            "description": "📢 Send Slack notification when task completes"
+          }
+        ]
+      }
+    ]
+  }
+}

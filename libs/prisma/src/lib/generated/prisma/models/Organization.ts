@@ -214,6 +214,7 @@ export type OrganizationWhereInput = {
   created_at?: Prisma.DateTimeFilter<"Organization"> | Date | string
   documents?: Prisma.DocumentListRelationFilter
   queries?: Prisma.RagQueryListRelationFilter
+  folders?: Prisma.FolderListRelationFilter
 }
 
 export type OrganizationOrderByWithRelationInput = {
@@ -223,6 +224,7 @@ export type OrganizationOrderByWithRelationInput = {
   created_at?: Prisma.SortOrder
   documents?: Prisma.DocumentOrderByRelationAggregateInput
   queries?: Prisma.RagQueryOrderByRelationAggregateInput
+  folders?: Prisma.FolderOrderByRelationAggregateInput
 }
 
 export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
@@ -235,6 +237,7 @@ export type OrganizationWhereUniqueInput = Prisma.AtLeast<{
   created_at?: Prisma.DateTimeFilter<"Organization"> | Date | string
   documents?: Prisma.DocumentListRelationFilter
   queries?: Prisma.RagQueryListRelationFilter
+  folders?: Prisma.FolderListRelationFilter
 }, "id" | "max_user_id">
 
 export type OrganizationOrderByWithAggregationInput = {
@@ -265,6 +268,7 @@ export type OrganizationCreateInput = {
   created_at?: Date | string
   documents?: Prisma.DocumentCreateNestedManyWithoutOrganizationInput
   queries?: Prisma.RagQueryCreateNestedManyWithoutOrganizationInput
+  folders?: Prisma.FolderCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateInput = {
@@ -274,6 +278,7 @@ export type OrganizationUncheckedCreateInput = {
   created_at?: Date | string
   documents?: Prisma.DocumentUncheckedCreateNestedManyWithoutOrganizationInput
   queries?: Prisma.RagQueryUncheckedCreateNestedManyWithoutOrganizationInput
+  folders?: Prisma.FolderUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUpdateInput = {
@@ -282,6 +287,7 @@ export type OrganizationUpdateInput = {
   created_at?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   documents?: Prisma.DocumentUpdateManyWithoutOrganizationNestedInput
   queries?: Prisma.RagQueryUpdateManyWithoutOrganizationNestedInput
+  folders?: Prisma.FolderUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateInput = {
@@ -291,6 +297,7 @@ export type OrganizationUncheckedUpdateInput = {
   created_at?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   documents?: Prisma.DocumentUncheckedUpdateManyWithoutOrganizationNestedInput
   queries?: Prisma.RagQueryUncheckedUpdateManyWithoutOrganizationNestedInput
+  folders?: Prisma.FolderUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateManyInput = {
@@ -379,6 +386,20 @@ export type OrganizationUpdateOneRequiredWithoutDocumentsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutDocumentsInput, Prisma.OrganizationUpdateWithoutDocumentsInput>, Prisma.OrganizationUncheckedUpdateWithoutDocumentsInput>
 }
 
+export type OrganizationCreateNestedOneWithoutFoldersInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutFoldersInput, Prisma.OrganizationUncheckedCreateWithoutFoldersInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutFoldersInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+}
+
+export type OrganizationUpdateOneRequiredWithoutFoldersNestedInput = {
+  create?: Prisma.XOR<Prisma.OrganizationCreateWithoutFoldersInput, Prisma.OrganizationUncheckedCreateWithoutFoldersInput>
+  connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutFoldersInput
+  upsert?: Prisma.OrganizationUpsertWithoutFoldersInput
+  connect?: Prisma.OrganizationWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.OrganizationUpdateToOneWithWhereWithoutFoldersInput, Prisma.OrganizationUpdateWithoutFoldersInput>, Prisma.OrganizationUncheckedUpdateWithoutFoldersInput>
+}
+
 export type OrganizationCreateNestedOneWithoutQueriesInput = {
   create?: Prisma.XOR<Prisma.OrganizationCreateWithoutQueriesInput, Prisma.OrganizationUncheckedCreateWithoutQueriesInput>
   connectOrCreate?: Prisma.OrganizationCreateOrConnectWithoutQueriesInput
@@ -398,6 +419,7 @@ export type OrganizationCreateWithoutDocumentsInput = {
   max_user_id: number
   created_at?: Date | string
   queries?: Prisma.RagQueryCreateNestedManyWithoutOrganizationInput
+  folders?: Prisma.FolderCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutDocumentsInput = {
@@ -406,6 +428,7 @@ export type OrganizationUncheckedCreateWithoutDocumentsInput = {
   max_user_id: number
   created_at?: Date | string
   queries?: Prisma.RagQueryUncheckedCreateNestedManyWithoutOrganizationInput
+  folders?: Prisma.FolderUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutDocumentsInput = {
@@ -429,6 +452,7 @@ export type OrganizationUpdateWithoutDocumentsInput = {
   max_user_id?: Prisma.IntFieldUpdateOperationsInput | number
   created_at?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   queries?: Prisma.RagQueryUpdateManyWithoutOrganizationNestedInput
+  folders?: Prisma.FolderUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutDocumentsInput = {
@@ -437,6 +461,57 @@ export type OrganizationUncheckedUpdateWithoutDocumentsInput = {
   max_user_id?: Prisma.IntFieldUpdateOperationsInput | number
   created_at?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   queries?: Prisma.RagQueryUncheckedUpdateManyWithoutOrganizationNestedInput
+  folders?: Prisma.FolderUncheckedUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationCreateWithoutFoldersInput = {
+  name: string
+  max_user_id: number
+  created_at?: Date | string
+  documents?: Prisma.DocumentCreateNestedManyWithoutOrganizationInput
+  queries?: Prisma.RagQueryCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationUncheckedCreateWithoutFoldersInput = {
+  id?: number
+  name: string
+  max_user_id: number
+  created_at?: Date | string
+  documents?: Prisma.DocumentUncheckedCreateNestedManyWithoutOrganizationInput
+  queries?: Prisma.RagQueryUncheckedCreateNestedManyWithoutOrganizationInput
+}
+
+export type OrganizationCreateOrConnectWithoutFoldersInput = {
+  where: Prisma.OrganizationWhereUniqueInput
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutFoldersInput, Prisma.OrganizationUncheckedCreateWithoutFoldersInput>
+}
+
+export type OrganizationUpsertWithoutFoldersInput = {
+  update: Prisma.XOR<Prisma.OrganizationUpdateWithoutFoldersInput, Prisma.OrganizationUncheckedUpdateWithoutFoldersInput>
+  create: Prisma.XOR<Prisma.OrganizationCreateWithoutFoldersInput, Prisma.OrganizationUncheckedCreateWithoutFoldersInput>
+  where?: Prisma.OrganizationWhereInput
+}
+
+export type OrganizationUpdateToOneWithWhereWithoutFoldersInput = {
+  where?: Prisma.OrganizationWhereInput
+  data: Prisma.XOR<Prisma.OrganizationUpdateWithoutFoldersInput, Prisma.OrganizationUncheckedUpdateWithoutFoldersInput>
+}
+
+export type OrganizationUpdateWithoutFoldersInput = {
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  max_user_id?: Prisma.IntFieldUpdateOperationsInput | number
+  created_at?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  documents?: Prisma.DocumentUpdateManyWithoutOrganizationNestedInput
+  queries?: Prisma.RagQueryUpdateManyWithoutOrganizationNestedInput
+}
+
+export type OrganizationUncheckedUpdateWithoutFoldersInput = {
+  id?: Prisma.IntFieldUpdateOperationsInput | number
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  max_user_id?: Prisma.IntFieldUpdateOperationsInput | number
+  created_at?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  documents?: Prisma.DocumentUncheckedUpdateManyWithoutOrganizationNestedInput
+  queries?: Prisma.RagQueryUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationCreateWithoutQueriesInput = {
@@ -444,6 +519,7 @@ export type OrganizationCreateWithoutQueriesInput = {
   max_user_id: number
   created_at?: Date | string
   documents?: Prisma.DocumentCreateNestedManyWithoutOrganizationInput
+  folders?: Prisma.FolderCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationUncheckedCreateWithoutQueriesInput = {
@@ -452,6 +528,7 @@ export type OrganizationUncheckedCreateWithoutQueriesInput = {
   max_user_id: number
   created_at?: Date | string
   documents?: Prisma.DocumentUncheckedCreateNestedManyWithoutOrganizationInput
+  folders?: Prisma.FolderUncheckedCreateNestedManyWithoutOrganizationInput
 }
 
 export type OrganizationCreateOrConnectWithoutQueriesInput = {
@@ -475,6 +552,7 @@ export type OrganizationUpdateWithoutQueriesInput = {
   max_user_id?: Prisma.IntFieldUpdateOperationsInput | number
   created_at?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   documents?: Prisma.DocumentUpdateManyWithoutOrganizationNestedInput
+  folders?: Prisma.FolderUpdateManyWithoutOrganizationNestedInput
 }
 
 export type OrganizationUncheckedUpdateWithoutQueriesInput = {
@@ -483,6 +561,7 @@ export type OrganizationUncheckedUpdateWithoutQueriesInput = {
   max_user_id?: Prisma.IntFieldUpdateOperationsInput | number
   created_at?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   documents?: Prisma.DocumentUncheckedUpdateManyWithoutOrganizationNestedInput
+  folders?: Prisma.FolderUncheckedUpdateManyWithoutOrganizationNestedInput
 }
 
 
@@ -493,11 +572,13 @@ export type OrganizationUncheckedUpdateWithoutQueriesInput = {
 export type OrganizationCountOutputType = {
   documents: number
   queries: number
+  folders: number
 }
 
 export type OrganizationCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   documents?: boolean | OrganizationCountOutputTypeCountDocumentsArgs
   queries?: boolean | OrganizationCountOutputTypeCountQueriesArgs
+  folders?: boolean | OrganizationCountOutputTypeCountFoldersArgs
 }
 
 /**
@@ -524,6 +605,13 @@ export type OrganizationCountOutputTypeCountQueriesArgs<ExtArgs extends runtime.
   where?: Prisma.RagQueryWhereInput
 }
 
+/**
+ * OrganizationCountOutputType without action
+ */
+export type OrganizationCountOutputTypeCountFoldersArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.FolderWhereInput
+}
+
 
 export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -532,6 +620,7 @@ export type OrganizationSelect<ExtArgs extends runtime.Types.Extensions.Internal
   created_at?: boolean
   documents?: boolean | Prisma.Organization$documentsArgs<ExtArgs>
   queries?: boolean | Prisma.Organization$queriesArgs<ExtArgs>
+  folders?: boolean | Prisma.Organization$foldersArgs<ExtArgs>
   _count?: boolean | Prisma.OrganizationCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["organization"]>
 
@@ -560,6 +649,7 @@ export type OrganizationOmit<ExtArgs extends runtime.Types.Extensions.InternalAr
 export type OrganizationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   documents?: boolean | Prisma.Organization$documentsArgs<ExtArgs>
   queries?: boolean | Prisma.Organization$queriesArgs<ExtArgs>
+  folders?: boolean | Prisma.Organization$foldersArgs<ExtArgs>
   _count?: boolean | Prisma.OrganizationCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type OrganizationIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -570,6 +660,7 @@ export type $OrganizationPayload<ExtArgs extends runtime.Types.Extensions.Intern
   objects: {
     documents: Prisma.$DocumentPayload<ExtArgs>[]
     queries: Prisma.$RagQueryPayload<ExtArgs>[]
+    folders: Prisma.$FolderPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: number
@@ -972,6 +1063,7 @@ export interface Prisma__OrganizationClient<T, Null = never, ExtArgs extends run
   readonly [Symbol.toStringTag]: "PrismaPromise"
   documents<T extends Prisma.Organization$documentsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$documentsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DocumentPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   queries<T extends Prisma.Organization$queriesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$queriesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RagQueryPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  folders<T extends Prisma.Organization$foldersArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Organization$foldersArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$FolderPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1438,6 +1530,30 @@ export type Organization$queriesArgs<ExtArgs extends runtime.Types.Extensions.In
   take?: number
   skip?: number
   distinct?: Prisma.RagQueryScalarFieldEnum | Prisma.RagQueryScalarFieldEnum[]
+}
+
+/**
+ * Organization.folders
+ */
+export type Organization$foldersArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Folder
+   */
+  select?: Prisma.FolderSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Folder
+   */
+  omit?: Prisma.FolderOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.FolderInclude<ExtArgs> | null
+  where?: Prisma.FolderWhereInput
+  orderBy?: Prisma.FolderOrderByWithRelationInput | Prisma.FolderOrderByWithRelationInput[]
+  cursor?: Prisma.FolderWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.FolderScalarFieldEnum | Prisma.FolderScalarFieldEnum[]
 }
 
 /**

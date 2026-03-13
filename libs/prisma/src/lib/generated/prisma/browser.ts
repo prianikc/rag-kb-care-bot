@@ -28,6 +28,11 @@ export type Organization = Prisma.OrganizationModel
  */
 export type Document = Prisma.DocumentModel
 /**
+ * Model Folder
+ * 
+ */
+export type Folder = Prisma.FolderModel
+/**
  * Model DocumentChunk
  * 
  */

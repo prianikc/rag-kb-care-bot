@@ -4,8 +4,10 @@ import { UseGuards } from '@nestjs/common';
 import { MenuService } from './menu.service';
 import { OrgGuard } from '../shared/guards/auth.guard';
 import { MenuPayload } from './menu.types';
+import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
+import { FileBatchCollectorService } from '../knowledge-base/file-batch-collector.service';
 import { RedisStateService } from '../shared/services/redis-state.service';
-import { MessageCreatedHandlerRegistry } from './message-created-handler-registry.service';
+import { UserFlow } from '../shared/types/user-state.types';
 
 const COMMAND_PREFIX = '/';
 
@@ -14,12 +16,21 @@ function isCommand(text: string | null | undefined): boolean {
   return Boolean(t?.startsWith(COMMAND_PREFIX) && t.length > 1);
 }
 
+function hasFileAttachment(ctx: Context): boolean {
+  const attachments = ctx.message?.body?.attachments;
+  if (!attachments?.length) return false;
+  return attachments.some(
+    (a) => a.type === 'file' || a.type === 'image',
+  );
+}
+
 @MaxUpdate()
 export class MenuUpdate {
   constructor(
     private readonly menuService: MenuService,
+    private readonly kbService: KnowledgeBaseService,
     private readonly redisStateService: RedisStateService,
-    private readonly messageCreatedHandlerRegistry: MessageCreatedHandlerRegistry,
+    private readonly batchCollector: FileBatchCollectorService,
   ) {}
 
   @UseGuards(OrgGuard)
@@ -41,15 +52,37 @@ export class MenuUpdate {
       await next();
       return;
     }
+
+    if (hasFileAttachment(ctx)) {
+      await this.kbService.handleFileUpload(ctx);
+      return;
+    }
+
     const userId = ctx.user.user_id;
+
+    // Если идёт сбор файлов — сбросить и обработать батч
+    if (this.batchCollector.isCollecting(userId)) {
+      await this.kbService.flushBatch(userId);
+    }
+
     const state = await this.redisStateService.getUserState(userId);
 
-    if (state) {
-      const handler = this.messageCreatedHandlerRegistry.getHandler(state.flow);
-      if (handler) {
-        await handler.handle(ctx, state);
-        return;
-      }
+    if (state?.flow === UserFlow.createFolder && text?.trim()) {
+      await this.kbService.handleCreateFolderName(ctx);
+      return;
+    }
+    if (state?.flow === UserFlow.moveDocFilename && text?.trim()) {
+      await this.kbService.handleMoveDocFilename(ctx);
+      return;
+    }
+    if (state?.flow === UserFlow.moveDocFolder && text?.trim()) {
+      await this.kbService.handleMoveDocFolder(ctx);
+      return;
+    }
+
+    if (text?.trim()) {
+      await this.kbService.handleQuestion(ctx);
+      return;
     }
 
     await this.menuService.showMainMenu(ctx);

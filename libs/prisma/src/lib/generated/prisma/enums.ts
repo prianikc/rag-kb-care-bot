@@ -13,6 +13,7 @@ export const DocumentStatus = {
   pending: 'pending',
   indexing: 'indexing',
   ready: 'ready',
+  partial: 'partial',
   error: 'error'
 } as const
 

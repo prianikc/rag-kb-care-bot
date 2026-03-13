@@ -10,6 +10,7 @@
  */
 export type * from './models/Organization'
 export type * from './models/Document'
+export type * from './models/Folder'
 export type * from './models/DocumentChunk'
 export type * from './models/RagQuery'
 export type * from './commonInputTypes'

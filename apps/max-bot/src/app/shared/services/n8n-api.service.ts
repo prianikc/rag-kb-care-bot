@@ -8,18 +8,23 @@ export interface RagUploadRequest {
   filename: string;
   mime_type: string;
   content_base64: string;
+  folder_id?: number | null;
 }
 
 export interface RagUploadResponse {
   success: boolean;
   document_id: number;
   chunk_count: number;
+  skipped_pages?: number;
+  total_pages?: number;
+  ocr_pages?: number;
 }
 
 export interface RagQuestionRequest {
   org_id: number;
   user_max_id: number;
   question: string;
+  folder_structure?: string;
 }
 
 export interface RagQuestionResponse {
