@@ -14,6 +14,7 @@ model Organization {
   created_at  DateTime   @default(now())
   documents   Document[]
   queries     RagQuery[]
+  estimates   Estimate[]
 }
 
 model Document {
@@ -53,6 +54,39 @@ model RagQuery {
 enum DocumentStatus {
   pending
   indexing
+  ready
+  error
+}
+
+model Estimate {
+  id              Int            @id @default(autoincrement())
+  organization_id Int
+  title           String         @db.VarChar(500)
+  parameters      Json
+  status          EstimateStatus @default(pending)
+  total_cost      Decimal?       @db.Decimal(12, 2)
+  result_data     Json?
+  sheet_url       String?        @db.VarChar(1000)
+  error_message   String?
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+  organization    Organization   @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  items           EstimateItem[]
+}
+
+model EstimateItem {
+  id          Int      @id @default(autoincrement())
+  estimate_id Int
+  work_type   String   @db.VarChar(500)
+  materials   Json
+  labor_cost  Decimal  @db.Decimal(12, 2)
+  total_cost  Decimal  @db.Decimal(12, 2)
+  estimate    Estimate @relation(fields: [estimate_id], references: [id], onDelete: Cascade)
+}
+
+enum EstimateStatus {
+  pending
+  generating
   ready
   error
 }

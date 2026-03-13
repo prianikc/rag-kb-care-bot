@@ -9,6 +9,7 @@ import * as https from "https";
 
 import { MenuModule } from "./menu/menu.module";
 import { KnowledgeBaseModule } from "./knowledge-base/knowledge-base.module";
+import { EstimateModule } from "./estimate/estimate.module";
 import { MaxModule, MaxModuleOptions } from "nestjs-max";
 import { BotContextInterceptor } from "./common/interceptors/bot-context.interceptor";
 import { BotExceptionFilter } from "./common/filters/bot-exception-filter";
@@ -66,6 +67,7 @@ import { CommonModule } from "./common/common.module";
     }),
     MenuModule,
     KnowledgeBaseModule,
+    EstimateModule,
     CommonModule,
   ],
   providers: [

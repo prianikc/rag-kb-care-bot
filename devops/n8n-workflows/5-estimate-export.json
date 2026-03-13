@@ -1,0 +1,109 @@
+{
+  "id": "5",
+  "name": "Estimate: Экспорт в Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "estimate-export",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a5000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "estimate-export-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst body = item.json.body;\nreturn [{ json: { org_id: body.org_id, estimate_id: body.estimate_id } }];"
+      },
+      "id": "a5000001-0001-0001-0001-000000000010",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { Client } = require('pg');\nconst item = $input.first().json;\nconst client = new Client({ host: $env.APP_PG_HOST || 'db', port: parseInt($env.APP_PG_PORT || '5432'), user: $env.APP_PG_USER, password: $env.APP_PG_PASSWORD, database: ($env.APP_PG_DATABASE || 'ragkb_app') });\nawait client.connect();\ntry {\n  const estResult = await client.query('SELECT * FROM \"Estimate\" WHERE id = $1 AND organization_id = $2', [item.estimate_id, item.org_id]);\n  if (!estResult.rows.length) throw new Error('Estimate not found');\n  const estimate = estResult.rows[0];\n\n  const itemsResult = await client.query('SELECT * FROM \"EstimateItem\" WHERE estimate_id = $1 ORDER BY id', [item.estimate_id]);\n  const items = itemsResult.rows;\n\n  return [{ json: { estimate, items, org_id: item.org_id, estimate_id: item.estimate_id } }];\n} finally {\n  await client.end();\n}"
+      },
+      "id": "a5000001-0001-0001-0001-000000000002",
+      "name": "PG: Load Estimate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// TODO: Здесь будет интеграция с Google Sheets API\n// Для MVP возвращаем заглушку — в продакшене создаётся новый Google Sheet\n// с таблицей сметы и возвращается ссылка на него\n//\n// Для подключения Google Sheets:\n// 1. Настроить Google Sheets credentials в n8n UI\n// 2. Заменить этот Code-нод на Google Sheets нод\n// 3. Создать новый spreadsheet с данными сметы\n\nconst item = $input.first().json;\nconst estimate = item.estimate;\nconst items = item.items;\n\n// Формируем данные для Google Sheet\nconst rows = [];\nrows.push(['Вид работы', 'Материал', 'Единица', 'Количество', 'Цена', 'Стоимость работы', 'Итого']);\n\nfor (const ei of items) {\n  const materials = typeof ei.materials === 'string' ? JSON.parse(ei.materials) : ei.materials;\n  for (let j = 0; j < materials.length; j++) {\n    const m = materials[j];\n    rows.push([\n      j === 0 ? ei.work_type : '',\n      m.name,\n      m.unit,\n      m.quantity,\n      m.price,\n      j === 0 ? ei.labor_cost : '',\n      j === 0 ? ei.total_cost : ''\n    ]);\n  }\n}\nrows.push(['', '', '', '', '', 'ИТОГО:', estimate.total_cost]);\n\n// TODO: Заменить на реальный URL после настройки Google Sheets\nconst sheetUrl = 'https://docs.google.com/spreadsheets/d/PLACEHOLDER_' + item.estimate_id;\n\nreturn [{ json: { sheet_url: sheetUrl, estimate_id: item.estimate_id, org_id: item.org_id, rows } }];"
+      },
+      "id": "a5000001-0001-0001-0001-000000000003",
+      "name": "Create Google Sheet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { Client } = require('pg');\nconst item = $input.first().json;\nconst client = new Client({ host: $env.APP_PG_HOST || 'db', port: parseInt($env.APP_PG_PORT || '5432'), user: $env.APP_PG_USER, password: $env.APP_PG_PASSWORD, database: ($env.APP_PG_DATABASE || 'ragkb_app') });\nawait client.connect();\ntry {\n  await client.query('UPDATE \"Estimate\" SET sheet_url = $1, updated_at = NOW() WHERE id = $2', [item.sheet_url, item.estimate_id]);\n  return [{ json: { sheet_url: item.sheet_url } }];\n} finally {\n  await client.end();\n}"
+      },
+      "id": "a5000001-0001-0001-0001-000000000004",
+      "name": "PG: Update Sheet URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a5000001-0001-0001-0001-000000000005",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Parse Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [{ "node": "PG: Load Estimate", "type": "main", "index": 0 }]
+      ]
+    },
+    "PG: Load Estimate": {
+      "main": [
+        [{ "node": "Create Google Sheet", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Google Sheet": {
+      "main": [
+        [{ "node": "PG: Update Sheet URL", "type": "main", "index": 0 }]
+      ]
+    },
+    "PG: Update Sheet URL": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": true
+}

@@ -1,0 +1,77 @@
+{
+  "id": "6",
+  "name": "Estimate: Список смет",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "estimate-list",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a6000001-0001-0001-0001-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "estimate-list-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst body = item.json.body;\nreturn [{ json: { org_id: body.org_id } }];"
+      },
+      "id": "a6000001-0001-0001-0001-000000000010",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { Client } = require('pg');\nconst item = $input.first().json;\nconst client = new Client({ host: $env.APP_PG_HOST || 'db', port: parseInt($env.APP_PG_PORT || '5432'), user: $env.APP_PG_USER, password: $env.APP_PG_PASSWORD, database: ($env.APP_PG_DATABASE || 'ragkb_app') });\nawait client.connect();\ntry {\n  const result = await client.query(\n    'SELECT id, title, status, total_cost, created_at FROM \"Estimate\" WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 20',\n    [item.org_id]\n  );\n  return [{ json: { estimates: result.rows.map(r => ({ id: r.id, title: r.title, status: r.status, total_cost: r.total_cost ? parseFloat(r.total_cost) : null, created_at: r.created_at.toISOString() })) } }];\n} finally {\n  await client.end();\n}"
+      },
+      "id": "a6000001-0001-0001-0001-000000000002",
+      "name": "PG: List Estimates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "a6000001-0001-0001-0001-000000000003",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [750, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Parse Input", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [{ "node": "PG: List Estimates", "type": "main", "index": 0 }]
+      ]
+    },
+    "PG: List Estimates": {
+      "main": [
+        [{ "node": "Respond", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": true
+}

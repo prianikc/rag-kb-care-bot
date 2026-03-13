@@ -3,6 +3,7 @@ export enum UserFlow {
   upload = 'upload',
   question = 'question',
   docManagement = 'docManagement',
+  estimate = 'estimate',
 }
 
 export interface UserSessionState<T = unknown> {
